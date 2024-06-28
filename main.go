@@ -4,12 +4,25 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/gorilla/sessions"
 	"github.com/kkdai/youtube/v2"
+)
+
+var (
+	homeTemplate     *template.Template
+	downloadTemplate *template.Template
+	client           *youtube.Client
+	initOnce         sync.Once
+	store            = sessions.NewCookieStore([]byte("something-very-secret"))
+	dataStore        sync.Map // In-memory store
 )
 
 // VideoData holds video information
@@ -18,28 +31,13 @@ type VideoData struct {
 	Title        string
 	QualityVideo []string
 	QualityAudio []string
-	client       *youtube.Client
-	video        *youtube.Video
-	formatMap    map[string]*youtube.Format
+	FormatMap    map[string]*youtube.Format
+	Video        *youtube.Video // Added Video field
 }
-
-// TemplateData holds color information for the template
-type TemplateData struct {
-	Color1 string
-	Color2 string
-}
-
-var (
-	templateData     TemplateData
-	videoData        VideoData
-	homeTemplate     *template.Template
-	downloadTemplate *template.Template
-	client           *youtube.Client
-	initOnce         sync.Once
-)
 
 // generateRandomColor generates a random color in hexadecimal format
 func generateRandomColor() string {
+	rand.Seed(time.Now().UnixNano())
 	r := rand.Intn(256)
 	g := rand.Intn(256)
 	b := rand.Intn(256)
@@ -49,8 +47,15 @@ func generateRandomColor() string {
 // initializeTemplates initializes the templates once
 func initializeTemplates() {
 	initOnce.Do(func() {
-		homeTemplate = template.Must(template.ParseFiles("static/home.html"))
-		downloadTemplate = template.Must(template.ParseFiles("static/download.html"))
+		var err error
+		homeTemplate, err = template.ParseFiles("static/home.html")
+		if err != nil {
+			panic(fmt.Sprintf("Failed to parse home template: %v", err))
+		}
+		downloadTemplate, err = template.ParseFiles("static/download.html")
+		if err != nil {
+			panic(fmt.Sprintf("Failed to parse download template: %v", err))
+		}
 	})
 }
 
@@ -59,14 +64,24 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	initializeTemplates()
 	color1 := generateRandomColor()
 	color2 := generateRandomColor()
-	templateData.Color1 = color1
-	templateData.Color2 = color2
+	templateData := struct {
+		Color1 string
+		Color2 string
+	}{
+		Color1: color1,
+		Color2: color2,
+	}
 
-	homeTemplate.Execute(w, templateData)
+	err := homeTemplate.Execute(w, templateData)
+	if err != nil {
+		http.Error(w, "Failed to render template: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // searchHandler handles the video search request
 func searchHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session-name")
+
 	url := r.FormValue("url")
 	if url == "" {
 		http.Error(w, "URL parameter is required", http.StatusBadRequest)
@@ -79,63 +94,83 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	videoData = VideoData{
-		video:     video,
-		client:    client,
-		formatMap: make(map[string]*youtube.Format),
+	videoData := VideoData{
+		Image:     video.Thumbnails[0].URL,
+		Title:     video.Title,
+		FormatMap: make(map[string]*youtube.Format),
+		Video:     video, // Populate Video field
 	}
 
 	for _, format := range video.Formats {
 		var description string
 		if format.AudioChannels > 0 {
+			sizeMB := float64(format.ContentLength) / 1048576.0
 			if strings.Contains(format.MimeType, "video") {
-				if format.ContentLength == 0 {
-					sizeMB := float64((float64(format.Bitrate/8) * video.Duration.Seconds()) / 1048576.0)
-					description = fmt.Sprintf("%s (%.2fM)", format.QualityLabel, sizeMB)
-				} else {
-					sizeMB := float64(format.ContentLength) / 1048576.0
-					description = fmt.Sprintf("%s (%.2fM)", format.QualityLabel, sizeMB)
-				}
-			} else if strings.Contains(format.MimeType, "audio") {
-				if format.ContentLength == 0 {
-					sizeMB := float64((float64(format.Bitrate/8) * video.Duration.Seconds()) / 1048576.0)
-					description = fmt.Sprintf("%dkbps (%.2fM)", format.AverageBitrate/1000, sizeMB)
-				} else {
-					sizeMB := float64(format.ContentLength) / 1048576.0
-					description = fmt.Sprintf("%dkbps (%.2fM)", format.AverageBitrate/1000, sizeMB)
-				}
-			}
-			if strings.Contains(format.MimeType, "video") {
+				description = fmt.Sprintf("%s (%.2fM)", format.QualityLabel, sizeMB)
 				videoData.QualityVideo = append(videoData.QualityVideo, description)
 			} else if strings.Contains(format.MimeType, "audio") {
+				description = fmt.Sprintf("%dkbps (%.2fM)", format.AverageBitrate/1000, sizeMB)
 				videoData.QualityAudio = append(videoData.QualityAudio, description)
 			}
-			videoData.formatMap[description] = &format
+			videoData.FormatMap[description] = &format
 		}
-
 	}
 
-	videoData.Image = video.Thumbnails[0].URL
-	videoData.Title = video.Title
+	// Generate a unique ID for this session's video data
+	id := uuid.New().String()
+	dataStore.Store(id, videoData)
 
-	downloadTemplate.Execute(w, videoData)
+	session.Values["videoDataID"] = id
+	if err := session.Save(r, w); err != nil {
+		log.Printf("Failed to save session: %v", err)
+		http.Error(w, "Failed to save session: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := downloadTemplate.Execute(w, videoData); err != nil {
+		log.Printf("Failed to render template: %v", err)
+		http.Error(w, "Failed to render template: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // downloadHandler handles the video download request
 func downloadHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "session-name")
+
+	val, ok := session.Values["videoDataID"].(string)
+	if !ok {
+		log.Println("Invalid session data ID")
+		http.Error(w, "Invalid session data", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the video data from the in-memory store
+	v, ok := dataStore.Load(val)
+	if !ok {
+		log.Println("Video data not found in store")
+		http.Error(w, "Video data not found", http.StatusBadRequest)
+		return
+	}
+	videoData, ok := v.(VideoData)
+	if !ok {
+		log.Println("Failed to assert video data")
+		http.Error(w, "Invalid session data", http.StatusBadRequest)
+		return
+	}
+
 	quality := r.FormValue("Quality")
-	format, exists := videoData.formatMap[quality]
+	format, exists := videoData.FormatMap[quality]
 	if !exists {
 		http.Error(w, "Unsupported format", http.StatusBadRequest)
 		return
 	}
 
-	stream, _, err := client.GetStream(videoData.video, format)
+	stream, _, err := client.GetStream(videoData.Video, format) // Use videoData.Video
 	if err != nil {
+		log.Printf("Failed to get video stream: %v", err)
 		http.Error(w, "Failed to get video stream: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	defer stream.Close()
 
 	var fileExtension, contentType string
@@ -155,8 +190,8 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", contentType)
 
 	if _, err := io.Copy(w, stream); err != nil {
+		log.Printf("Failed to write video stream to response: %v", err)
 		http.Error(w, "Failed to write video stream to response: "+err.Error(), http.StatusInternalServerError)
-		return
 	}
 }
 
