@@ -1,0 +1,172 @@
+body {
+    height: 100vh;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+}
+
+.container {
+    width: 90%;
+    /* Default width for small screens */
+    max-width: 600px;
+    /* Maximum width for larger screens */
+    margin-top: 170px;
+    padding: 10px;
+    box-sizing: border-box;
+    /* Ensures padding is included in the width */
+}
+
+.search {
+    background: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    border-radius: 10px;
+    /* padding: 5px 10px; */
+    backdrop-filter: blur(4px) saturate(180%);
+}
+
+.input {
+    background: transparent;
+    flex: 1;
+    border: 0;
+    outline: none;
+    padding: 15px 15px;
+    font-size: 18px;
+    color: #000;
+    /* Color for text */
+}
+
+.search .submitButton {
+    border: 0;
+    border-radius: 0 10px 10px 0 ;
+    width: 60px;
+    height: 50px;
+    background: rgba(255, 255, 255, 0.6);
+    color: black;
+    border-left: solid 2px black;
+    cursor: pointer;
+}
+
+.input:not(:placeholder-shown) + .resetButton {
+    display: inline-block; /* Show the reset button when input is not empty */
+}
+
+.resetButton {
+    display: none; /* Initially hide the reset button */
+    position: absolute;
+    right: 4.5rem;
+    background: rgba(255, 255, 255, 0.2);
+    border: 0;
+    border-radius: 50%;
+    height: 2.5rem;
+    width: 2.5rem;
+    cursor: pointer;
+}
+
+.resetButton::after {
+    content: '';
+    display: inline-block;
+    width: 17px; /* Adjust width as needed */
+    height: 17px; /* Adjust height as needed */
+    background: url("cancel.png") center no-repeat;
+    background-size: 30px;
+}
+
+#download {
+    width: 90%;
+    /* Default width for small screens */
+    max-width: 600px;
+    /* Maximum width for larger screens */
+    padding: 10px;
+    display: flex;
+    box-sizing: border-box;
+}
+
+#download img {
+    width: 280px;
+    margin-right: 20px;
+}
+
+#download .select {
+    flex-direction: row;
+}
+
+.select select {
+    padding: 7px;
+    font-size: 15px;
+    border: 1px solid #c9d6ff;
+    border-radius: 4px;
+    background-color: #c9d6ff;
+    width: 140px;
+}
+
+.title {
+    margin: 20px 0;
+    font-size: 20px;
+}
+
+.button {
+    padding: 8px 20px;
+    font-size: 15px;
+    border-radius: 4px;
+    background: #c9d6ff;
+    cursor: pointer;
+    border: 1px solid #c9d6ff;
+    transition: all 0.3s;
+}
+
+.button:active {
+    background-color: #F0F0F1;
+    border-color: rgba(0, 0, 0, 0.15);
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.downloadErea {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    justify-content: space-between;
+}
+
+.center {
+    align-items: center;
+}
+
+/* Media queries for responsive design */
+@media (min-width: 600px) {
+    .container {
+        width: 80%;
+        /* Wider width for medium screens */
+    }
+}
+
+@media (max-width: 600px) {
+    .center {
+        display: flex;
+        justify-content: center;
+        justify-content: space-evenly;
+    }
+
+    #download {
+        width: 90%;
+        /* Default width for small screens */
+        max-width: 600px;
+        /* Maximum width for larger screens */
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        box-sizing: border-box;
+    }
+
+}
+
+@media (min-width: 900px) {
+    .container {
+        width: 70%;
+        /* Even wider width for larger screens */
+    }
+}

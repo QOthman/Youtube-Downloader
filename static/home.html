@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://unpkg.com/htmx.org@2.0.0" integrity="sha384-wS5l5IKJBvK6sPTKa2WZ1js3d947pvWXbPJ1OmWfEuxLgeHcEbjUUA5i9V5ZkpCw" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="static/style.css">
+    <style>
+        body {
+            background: linear-gradient(to right, {{ .Color1 }}, {{ .Color2 }});
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <form hx-post="/search" class="search" hx-target="#download"> 
+            <input type="text" name="url" class="input" placeholder="Enter URL" autofocus>
+            <button type="reset" class="resetButton" onclick="document.getElementById('download').innerHTML='';" ></button>
+            <button type="submit" class="submitButton"><img src="static/search.png" width="21px" alt="Search"></button>
+        </form>
+    </div>
+    <div id="download"></div>
+</body>
+</html>
