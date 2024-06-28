@@ -1,6 +1,6 @@
 module main
 
-go 1.22.4
+go 1.22.2
 
 require github.com/kkdai/youtube/v2 v2.10.1
 
